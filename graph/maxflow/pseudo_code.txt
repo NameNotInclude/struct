@@ -1,0 +1,49 @@
+function DinicBFS(Graph Gr,sou,dest,level[])
+    Q=CreatQueue
+    Enqueue(Q,sou)
+    level[sou]=0
+
+    while queue Q is not empty:
+        u=dequeue(Q)
+        for every node v pointed by u:
+            if v is not visited
+                level[v]=level[u]+1
+                enqueue(Q,v)
+    
+    if t is visited
+        return True
+
+    else
+        return False
+
+function DinicDFS(Graph Gr,sou,dest,level[],flow)
+    if sou==dest 
+        return flow
+
+    for every node v:
+        if v is on the next level and edge (u,v) exist
+            min=MIN(flow,r(u,v))
+            pushed=DinicDFS(Gr,v,t,min)
+
+            if pushed>0
+                r(u,v)-=pushed
+                r(v,u)+=pushed
+
+                return pushed
+
+    return 0
+
+function Dinic(Graph Gr,sou,dest)
+    creat list: level
+    flow=0
+
+    while path from sou to dest exist(DinicBFS!=0):
+        while True:
+            pushed=DinicDFS(Gr,s,t,level,MAX)
+            if pushed==0
+                break
+            flow+=pushed
+
+    return flow
+
+
