@@ -1,195 +1,117 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include "hash.h"
 
-typedef int (*hashf)(int);
+/* Robin Hood 哈希：记录探测距离 dist，插入时“劫富济贫” */
 
-typedef struct
-{
+typedef struct {
     int value;
     int dist;
-    short state;
-    //0:empty,1:normal
-} hashnode;
+    short state; /* 0 空, 1 占用 */
+} RHSlot;
 
-typedef struct
-{
-    hashnode* list;
+struct RHHash {
+    RHSlot *slots;
     int capacity;
-    hashf func;
-} hash;
+};
 
-int capa;
-
-hash* creat(int c, hashf fun);
-int default_hash_function(int key);
-void insert(hash* H, int value);
-void delete_node(hash* H, int value);
-int search(hash* H, int value);
-void freeH(hash* H);
-
-int main()
+RHHash* rh_create(int capacity)
 {
-    hash* h = creat(23, NULL);
-    if (h == NULL)
-        return 0;
-
-    for (int i = 0; i < 7; i++)
+    if (capacity <= 0)
+        return NULL;
+    RHHash *h = (RHHash*)malloc(sizeof(RHHash));
+    h->slots = (RHSlot*)malloc(sizeof(RHSlot) * capacity);
+    for (int i = 0; i < capacity; i++)
     {
-        int x;
-        scanf("%d", &x);
-        insert(h, x);
+        h->slots[i].state = 0;
+        h->slots[i].dist = 0;
     }
-
-    for (int i = 0; i < h->capacity; i++)
-        printf("%4d ", i);
-    printf("\n");
-
-    for (int i = 0; i < h->capacity; i++)
-    {
-        if (h->list[i].state == 1)
-            printf("%4d ", h->list[i].value);
-        else
-            printf("  -1 ");
-    }
-    printf("\n");
-
-    freeH(h);
-    return 0;
+    h->capacity = capacity;
+    return h;
 }
 
-hash* creat(int c, hashf fun)
+void rh_insert(RHHash *h, int value)
 {
-    if (c <= 0)
-        return NULL;
-
-    hashnode* h = (hashnode*)malloc(sizeof(hashnode) * c);
-    if (h == NULL)
-        return NULL;
-
-    for (int i = 0; i < c; i++)
-    {
-        h[i].state = 0;
-        h[i].dist = 0;
-    }
-
-    hash* re = (hash*)malloc(sizeof(hash));
-    if (re == NULL)
-    {
-        free(h);
-        return NULL;
-    }
-
-    re->list = h;
-    re->func = (fun == NULL) ? default_hash_function : fun;
-    re->capacity = c;
-    return re;
-}
-
-int default_hash_function(int key)
-{
-    if (capa <= 0)
-        return 0;
-
-    int value = key % capa;
-    return value < 0 ? value + capa : value;
-}
-
-void insert(hash* H, int value)
-{
-    if (H == NULL || H->list == NULL)
+    if (!h || !h->slots)
         return;
 
-    if (H->func == default_hash_function)
-        capa = H->capacity;
+    int pos = hash_default(value, h->capacity);
+    RHSlot cur;
+    cur.value = value;
+    cur.dist = 0;
+    cur.state = 1;
 
-    int pos = H->func(value);
-    if (pos < 0 || pos >= H->capacity)
-        return;
-
-    hashnode curr;
-    curr.value = value;
-    curr.dist = 0;
-    curr.state = 1;
-
-    for (int i = 0; i < H->capacity; i++)
+    for (int i = 0; i < h->capacity; i++)
     {
-        int idx = (pos + curr.dist) % H->capacity;
+        int idx = (pos + cur.dist) % h->capacity;
 
-        if (H->list[idx].state == 0)
+        if (h->slots[idx].state == 0)
         {
-            H->list[idx] = curr;
+            h->slots[idx] = cur;
             return;
         }
 
-        if (H->list[idx].value == curr.value)
+        if (h->slots[idx].value == value)
             return;
 
-        if (H->list[idx].dist < curr.dist)
+        if (h->slots[idx].dist < cur.dist)
         {
-            hashnode temp = H->list[idx];
-            H->list[idx] = curr;
-            curr = temp;
+            RHSlot tmp = h->slots[idx];
+            h->slots[idx] = cur;
+            cur = tmp;
         }
 
-        curr.dist++;
+        cur.dist++;
     }
 }
 
-int search(hash* H, int value)
+int rh_search(RHHash *h, int value)
 {
-    if (H == NULL || H->list == NULL)
+    if (!h || !h->slots)
         return -1;
 
-    if (H->func == default_hash_function)
-        capa = H->capacity;
-
-    int pos = H->func(value);
-    if (pos < 0 || pos >= H->capacity)
-        return -1;
-
-    for (int dist = 0; dist < H->capacity; dist++)
+    int pos = hash_default(value, h->capacity);
+    for (int dist = 0; dist < h->capacity; dist++)
     {
-        int idx = (pos + dist) % H->capacity;
+        int idx = (pos + dist) % h->capacity;
 
-        if (H->list[idx].state == 0)
+        if (h->slots[idx].state == 0)
             return -1;
 
-        if (H->list[idx].dist < dist)
+        if (h->slots[idx].dist < dist)
             return -1;
 
-        if (H->list[idx].value == value)
+        if (h->slots[idx].value == value)
             return idx;
     }
     return -1;
 }
 
-void delete_node(hash* H, int value)
+void rh_delete(RHHash *h, int value)
 {
-    if (H == NULL || H->list == NULL)
+    if (!h || !h->slots)
         return;
 
-    int idx = search(H, value);
+    int idx = rh_search(h, value);
     if (idx < 0)
         return;
 
-    int next = (idx + 1) % H->capacity;
-    while (H->list[next].state == 1 && H->list[next].dist > 0)
+    int next = (idx + 1) % h->capacity;
+    while (h->slots[next].state == 1 && h->slots[next].dist > 0)
     {
-        H->list[idx] = H->list[next];
-        H->list[idx].dist--;
+        h->slots[idx] = h->slots[next];
+        h->slots[idx].dist--;
         idx = next;
-        next = (next + 1) % H->capacity;
+        next = (next + 1) % h->capacity;
     }
 
-    H->list[idx].state = 0;
-    H->list[idx].dist = 0;
+    h->slots[idx].state = 0;
+    h->slots[idx].dist = 0;
 }
 
-void freeH(hash* H)
+void rh_free(RHHash *h)
 {
-    if (H == NULL)
+    if (!h)
         return;
-
-    free(H->list);
-    free(H);
+    free(h->slots);
+    free(h);
 }

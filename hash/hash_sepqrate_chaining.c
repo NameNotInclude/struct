@@ -1,160 +1,93 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include "hash.h"
 
-typedef struct H
-{
+/* 分离链接法：每个桶是一条单链表 */
+
+typedef struct CHNode {
     int value;
-    struct H* next;
-} Hnode;
+    struct CHNode *next;
+} CHNode;
 
-typedef Hnode* PtrToNode;
-
-typedef int (*hashf)(int);
-
-typedef struct
-{
+struct CHHash {
+    CHNode **buckets;
     int capacity;
-    PtrToNode* list;
-    hashf func;
-} hash;
+};
 
-int capa;
-
-hash* creat(int c, hashf fun);
-int default_hash_function(int key);
-void insert(hash* H, int value);
-void delete_node(hash* H, int value);
-PtrToNode search(hash* H, int value);
-void freeH(hash* h);
-
-int main()
+CHHash* ch_create(int capacity)
 {
+    if (capacity <= 0)
+        return NULL;
+    CHHash *h = (CHHash*)malloc(sizeof(CHHash));
+    h->buckets = (CHNode**)calloc(capacity, sizeof(CHNode*));
+    h->capacity = capacity;
+    return h;
+}
+
+void ch_insert(CHHash *h, int value)
+{
+    if (!h || !h->buckets)
+        return;
+    if (ch_search(h, value))
+        return; /* 不重复插入 */
+    int pos = hash_default(value, h->capacity);
+    CHNode *node = (CHNode*)malloc(sizeof(CHNode));
+    node->value = value;
+    node->next = h->buckets[pos];
+    h->buckets[pos] = node;
+}
+
+int ch_search(CHHash *h, int value)
+{
+    if (!h || !h->buckets)
+        return 0;
+    int pos = hash_default(value, h->capacity);
+    CHNode *cur = h->buckets[pos];
+    while (cur)
+    {
+        if (cur->value == value)
+            return 1;
+        cur = cur->next;
+    }
     return 0;
 }
 
-hash* creat(int c, hashf fun)
+void ch_delete(CHHash *h, int value)
 {
-    if (c <= 0)
-        return NULL;
-
-    PtrToNode* h = (PtrToNode*)malloc(sizeof(PtrToNode) * c);
-    if (h == NULL)
-        return NULL;
-
-    for (int i = 0; i < c; i++)
-        h[i] = NULL;
-
-    hash* re = (hash*)malloc(sizeof(hash));
-    if (re == NULL)
+    if (!h || !h->buckets)
+        return;
+    int pos = hash_default(value, h->capacity);
+    CHNode *prev = NULL;
+    CHNode *cur = h->buckets[pos];
+    while (cur)
     {
-        free(h);
-        return NULL;
-    }
-
-    re->list = h;
-    re->func = (fun == NULL) ? default_hash_function : fun;
-    re->capacity = c;
-    return re;
-}
-
-int default_hash_function(int key)
-{
-    if (capa <= 0)
-        return 0;
-
-    int value = key % capa;
-    return value < 0 ? value + capa : value;
-}
-
-void insert(hash* H, int value)
-{
-    if (H == NULL || H->list == NULL)
-        return;
-
-    if (H->func == default_hash_function)
-        capa = H->capacity;
-
-    int pos = H->func(value);
-    if (pos < 0 || pos >= H->capacity)
-        return;
-
-    PtrToNode newnode = (PtrToNode)malloc(sizeof(Hnode));
-    if (newnode == NULL)
-        return;
-
-    newnode->value = value;
-    newnode->next = H->list[pos];
-    H->list[pos] = newnode;
-}
-
-PtrToNode search(hash* H, int value)
-{
-    if (H == NULL || H->list == NULL)
-        return NULL;
-
-    if (H->func == default_hash_function)
-        capa = H->capacity;
-
-    int pos = H->func(value);
-    if (pos < 0 || pos >= H->capacity)
-        return NULL;
-
-    PtrToNode curr = H->list[pos];
-    while (curr != NULL)
-    {
-        if (curr->value == value)
-            return curr;
-        curr = curr->next;
-    }
-    return NULL;
-}
-
-void delete_node(hash* H, int value)
-{
-    if (H == NULL || H->list == NULL)
-        return;
-
-    if (H->func == default_hash_function)
-        capa = H->capacity;
-
-    int pos = H->func(value);
-    if (pos < 0 || pos >= H->capacity)
-        return;
-
-    PtrToNode prev = NULL;
-    PtrToNode curr = H->list[pos];
-    while (curr != NULL)
-    {
-        if (curr->value == value)
+        if (cur->value == value)
         {
-            if (prev == NULL)
-                H->list[pos] = curr->next;
+            if (prev)
+                prev->next = cur->next;
             else
-                prev->next = curr->next;
-            free(curr);
+                h->buckets[pos] = cur->next;
+            free(cur);
             return;
         }
-        prev = curr;
-        curr = curr->next;
+        prev = cur;
+        cur = cur->next;
     }
 }
 
-void freeH(hash* H)
+void ch_free(CHHash *h)
 {
-    if (H == NULL)
+    if (!h)
         return;
-
-    for (int i = 0; i < H->capacity; i++)
+    for (int i = 0; i < h->capacity; i++)
     {
-        PtrToNode curr = H->list[i];
-        while (curr != NULL)
+        CHNode *cur = h->buckets[i];
+        while (cur)
         {
-            PtrToNode temp = curr->next;
-            free(curr);
-            curr = temp;
+            CHNode *tmp = cur->next;
+            free(cur);
+            cur = tmp;
         }
     }
-    free(H->list);
-    free(H);
+    free(h->buckets);
+    free(h);
 }
-

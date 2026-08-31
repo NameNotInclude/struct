@@ -1,257 +1,186 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
+#include "../../stack_queue/stack_queue.h"
+#include "maxflow.h"
 
-#define MAX 2147483647
-
-typedef struct 
+FlowGraph* flow_create(int nv)
 {
-    int* q;
-    int front;
-    int rear;
-    int size;
-    int capacity;
-}queue;
+    if (nv <= 0)
+        return NULL;
+    FlowGraph *g = (FlowGraph*)malloc(sizeof(FlowGraph));
+    g->cap = (int**)malloc(sizeof(int*) * nv);
+    for (int i = 0; i < nv; i++)
+        g->cap[i] = (int*)calloc(nv, sizeof(int));
+    g->nv = nv;
+    return g;
+}
 
-typedef struct 
+int flow_add_edge(FlowGraph *g, int from, int to, int cap)
 {
-    int** G;
-    int Nv;
-    int Ne;
-}Graph;
-
-queue* creatQ(int capacity);
-void enqueue(queue* q,int tar);
-int dequeue(queue* q);
-int visitQ(queue* q);
-void freeQ(queue* q);
-
-Graph* creat();
-void freeG(Graph* Gr);
-int BFS(int s,int t,Graph* Gr,int parent[]);
-int Edmonds_Karp(int s,int t,Graph* Gr);
-int DinicBFS(int s,int t,Graph* Gr,int level[]);
-int DinicDFS(int u,int t,int flow,Graph* Gr,int level[],int next[]);
-int Dinic(int s,int t,Graph* Gr);
-
-int main()
-{
-    Graph* flow=creat();
-    printf("%d",Dinic(1,flow->Nv,flow));
-    freeG(flow);
+    if (!g || from < 1 || from > g->nv || to < 1 || to > g->nv ||
+        from == to || cap < 0)
+        return -1;
+    g->cap[from - 1][to - 1] += cap;
     return 0;
 }
 
-Graph* creat()
+void flow_free(FlowGraph *g)
 {
-    Graph* Gr=(Graph*)malloc(sizeof(Graph));
-    scanf("%d %d",&(Gr->Nv),&(Gr->Ne));
-
-    int** a=(int**)malloc(sizeof(int*)*(Gr->Nv)); 
-    for (int i=0;i<Gr->Nv;i++)
-    {
-        a[i]=(int*)malloc(sizeof(int)*(Gr->Nv));
-        for (int j=0;j<Gr->Nv;j++)
-            a[i][j]=0;
-    }
-
-    int i=0;
-    while (i<Gr->Ne)
-    {
-        int from,to,weight;
-        scanf("%d %d %d",&from,&to,&weight);
-
-        if (from<1 || from>Gr->Nv || to<1 || to>Gr->Nv)
-        {
-            printf("Invalid input\n");
-            continue;
-        }
-
-        if (a[from-1][to-1]!=0)
-        {
-            printf("Duplicated edge\n");
-            continue;
-        }
-
-        a[from-1][to-1]=weight;
-        i++;
-    }
-    Gr->G=a;
-
-    return Gr;
-}
-void freeG(Graph* Gr)
-{
-    if (Gr==NULL) return;
-
-    for (int i=0;i<Gr->Nv;i++)
-        free(Gr->G[i]);
-
-    free(Gr->G);
-
-    free(Gr);
-}
-Graph* copy(Graph* Gr)
-{
-    Graph* co=(Graph*)malloc(sizeof(Graph));
-    co->Ne=Gr->Ne;
-    co->Nv=Gr->Nv;
-
-    int** a=(int**)malloc(sizeof(int*)*(Gr->Nv)); 
-    for (int i=0;i<Gr->Nv;i++)
-    {
-        a[i]=(int*)malloc(sizeof(int)*(Gr->Nv));
-        for (int j=0;j<Gr->Nv;j++)
-            a[i][j]=Gr->G[i][j];
-    }
-
-    co->G=a;
-
-    return co;
+    if (!g)
+        return;
+    for (int i = 0; i < g->nv; i++)
+        free(g->cap[i]);
+    free(g->cap);
+    free(g);
 }
 
-int BFS(int s,int t,Graph* Gr,int parent[])
+static FlowGraph* flow_copy(FlowGraph *g)
 {
-    queue* Q=creatQ(Gr->Nv);
-    enqueue(Q,s);
-    parent[s]=-1;
-    int* visited=(int*)malloc(sizeof(int)*(Gr->Nv+1));
-    for (int i=1;i<=Gr->Nv;i++)
-        visited[i]=0;
-    visited[s]=1;
+    FlowGraph *c = flow_create(g->nv);
+    for (int i = 0; i < g->nv; i++)
+        for (int j = 0; j < g->nv; j++)
+            c->cap[i][j] = g->cap[i][j];
+    return c;
+}
 
-    while (Q->size>0)
+/* BFS 在残余网络中找增广路径，parent 记录路径 */
+static int bfs(FlowGraph *g, int s, int t, int *parent)
+{
+    queue *q = creatQ(g->nv);
+    int *visited = (int*)calloc(g->nv + 1, sizeof(int));
+
+    visited[s] = 1;
+    parent[s] = -1;
+    enqueue(q, s);
+
+    while (q->size > 0)
     {
-        int u=dequeue(Q);
-
-        //将所有与u相连的节点v加入队列
-        for (int v=1;v<=Gr->Nv;v++)
+        int u = dequeue(q);
+        for (int v = 1; v <= g->nv; v++)
         {
-            if (!visited[v] && Gr->G[u-1][v-1])
+            if (!visited[v] && g->cap[u - 1][v - 1] > 0)
             {
-                visited[v]=1;
-                parent[v]=u;
-                //v=t，找到一条到终点的路径，返回路径
-                if (v==t)
+                visited[v] = 1;
+                parent[v] = u;
+                if (v == t)
                 {
                     free(visited);
-                    freeQ(Q);
+                    freeQ(q);
                     return 1;
                 }
-                enqueue(Q,v);
+                enqueue(q, v);
             }
         }
     }
 
     free(visited);
-    freeQ(Q);
+    freeQ(q);
     return 0;
 }
-int Edmonds_Karp(int s,int t,Graph* Gr)
+
+int flow_edmonds_karp(FlowGraph *g, int s, int t)
 {
-    int flow=0;
-    int* p=(int*)malloc(sizeof(int)*(Gr->Nv+1));
+    if (!g || s < 1 || s > g->nv || t < 1 || t > g->nv)
+        return -1;
 
-    Graph* rest=copy(Gr);
+    FlowGraph *rest = flow_copy(g);
+    int *parent = (int*)malloc(sizeof(int) * (g->nv + 1));
+    int flow = 0;
 
-    while (BFS(s,t,rest,p))
+    while (bfs(rest, s, t, parent))
     {
-        int min=MAX;
-
-        //找到路径当中的最小流
-        for (int v=t;v!=s;v=p[v])
+        int min = INT_MAX;
+        for (int v = t; v != s; v = parent[v])
         {
-            if (rest->G[p[v]-1][v-1]<min)
-                min=rest->G[p[v]-1][v-1];
+            int u = parent[v];
+            if (rest->cap[u - 1][v - 1] < min)
+                min = rest->cap[u - 1][v - 1];
         }
 
-        //正向边减去流，反向边加上流
-        for (int v=t;v!=s;v=p[v])
+        for (int v = t; v != s; v = parent[v])
         {
-            rest->G[p[v]-1][v-1]-=min;
-            rest->G[v-1][p[v]-1]+=min;
+            int u = parent[v];
+            rest->cap[u - 1][v - 1] -= min;
+            rest->cap[v - 1][u - 1] += min;
         }
-        flow+=min;
+        flow += min;
     }
-    free(p);
-    freeG(rest);
+
+    free(parent);
+    flow_free(rest);
     return flow;
 }
 
-int DinicBFS(int s,int t,Graph* Gr,int level[])
+/* ---------------- Dinic ---------------- */
+
+static int dinic_bfs(FlowGraph *g, int s, int t, int *level)
 {
-    for (int i=1;i<=Gr->Nv;i++)
-        level[i]=-1;
+    for (int i = 1; i <= g->nv; i++)
+        level[i] = -1;
 
-    queue* Q=creatQ(Gr->Nv);
-    enqueue(Q,s);
-    level[s]=0;
+    queue *q = creatQ(g->nv);
+    enqueue(q, s);
+    level[s] = 0;
 
-    while (Q->size>0)
+    while (q->size > 0)
     {
-        int u=dequeue(Q);
-        for (int v=1;v<=Gr->Nv;v++)
+        int u = dequeue(q);
+        for (int v = 1; v <= g->nv; v++)
         {
-            if (level[v] < 0 && Gr->G[u-1][v-1] > 0)
+            if (level[v] < 0 && g->cap[u - 1][v - 1] > 0)
             {
                 level[v] = level[u] + 1;
-                enqueue(Q,v);
+                enqueue(q, v);
             }
         }
     }
 
-    freeQ(Q);
+    freeQ(q);
     return level[t] >= 0;
 }
-int DinicDFS(int u,int t,int flow,Graph* Gr,int level[],int next[])
+
+static int dinic_dfs(FlowGraph *g, int u, int t, int flow, int *level, int *next)
 {
     if (u == t)
         return flow;
 
-    //从next[u]开始尝试所有的节点
-    for (int v = next[u]; v <= Gr->Nv; v++)
+    for (int v = next[u]; v <= g->nv; v++)
     {
-        //弧优化：记录当前尝试的v，下一次从v+1开始
-        next[u] = v + 1;
-
-        //检查v是不是满足层序关系
-        if (level[v] == level[u] + 1 && Gr->G[u-1][v-1] > 0)
+        next[u] = v + 1; /* 当前弧优化 */
+        if (level[v] == level[u] + 1 && g->cap[u - 1][v - 1] > 0)
         {
-            //flow < Gr->G[u-1][v-1] ? flow : Gr->G[u-1][v-1]
-            //上式：计算u到v后，路径上剩余的最小容量
-
-            //向下递归探索
-            int pushed = DinicDFS(v, t, flow < Gr->G[u-1][v-1] ? flow : Gr->G[u-1][v-1], Gr, level, next);
-            
-            //pushed>0，说明找到增广路径
+            int pushed = dinic_dfs(g, v, t,
+                                   flow < g->cap[u - 1][v - 1] ? flow : g->cap[u - 1][v - 1],
+                                   level, next);
             if (pushed > 0)
             {
-                //正向边减少
-                Gr->G[u-1][v-1] -= pushed;
-
-                //反向边增加
-                Gr->G[v-1][u-1] += pushed;
+                g->cap[u - 1][v - 1] -= pushed;
+                g->cap[v - 1][u - 1] += pushed;
                 return pushed;
             }
         }
     }
-
     return 0;
 }
-int Dinic(int s,int t,Graph* Gr)
-{
-    Graph* rest = copy(Gr);
-    int flow = 0;
-    int* level = (int*)malloc(sizeof(int) * (rest->Nv + 1));
-    int* next = (int*)malloc(sizeof(int) * (rest->Nv + 1));
 
-    while (DinicBFS(s, t, rest, level))
+int flow_dinic(FlowGraph *g, int s, int t)
+{
+    if (!g || s < 1 || s > g->nv || t < 1 || t > g->nv)
+        return -1;
+
+    FlowGraph *rest = flow_copy(g);
+    int *level = (int*)malloc(sizeof(int) * (g->nv + 1));
+    int *next = (int*)malloc(sizeof(int) * (g->nv + 1));
+    int flow = 0;
+
+    while (dinic_bfs(rest, s, t, level))
     {
-        for (int i = 1; i <= rest->Nv; i++)
+        for (int i = 1; i <= g->nv; i++)
             next[i] = 1;
 
         while (1)
         {
-            int pushed = DinicDFS(s, t, MAX, rest, level, next);
+            int pushed = dinic_dfs(rest, s, t, INT_MAX, level, next);
             if (pushed == 0)
                 break;
             flow += pushed;
@@ -260,62 +189,6 @@ int Dinic(int s,int t,Graph* Gr)
 
     free(level);
     free(next);
-    freeG(rest);
+    flow_free(rest);
     return flow;
 }
-
-queue* creatQ(int capacity)
-{
-    queue* S=(queue*)malloc(sizeof(queue));
-    S->capacity=capacity;
-    S->size=0;
-    S->front=0;
-    S->rear=0;
-
-    int* H=(int*)malloc(sizeof(int)*capacity);
-    S->q=H;
-
-    return S;
-}
-void enqueue(queue* q,int tar)
-{
-    if (q->size==q->capacity)
-    return;
-
-    q->q[q->rear]=tar;
-    
-    q->size++;
-    q->rear=(q->rear+1)%q->capacity;
-}
-int dequeue(queue* q)
-{
-    if (q->size==0)
-    {
-        return -65536;
-    }
-
-    int tmp=q->q[q->front];
-
-    q->front=(q->front+1)%q->capacity;
-    q->size--;
-
-    return tmp;
-}
-int visitQ(queue* q)
-{
-    if (q->size==0)
-    {
-        return -65536;
-    }
-
-    return q->q[q->front];
-}
-void freeQ(queue* q)
-{
-    free(q->q);
-    free(q);
-}
-
-
-
-

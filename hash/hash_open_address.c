@@ -1,211 +1,120 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include "hash.h"
 
-typedef int (*hashf)(int);
+/* 开放定址法：线性探测 / 平方探测 / 双散列 */
 
-typedef struct 
-{
+typedef struct {
     int value;
-    short state;
-    //0:empty,1:normal,-1:deleted
-}hashnode;
+    short state; /* 0 空, 1 占用, -1 已删除 */
+} OASlot;
 
-typedef struct 
-{
-    hashnode* list;
+struct OAHash {
+    OASlot *slots;
     int capacity;
-    hashf func;
-}hash;
+    int mode; /* 0 线性, 1 平方, 2 双散列 */
+};
 
-int capa;
-//0:linear,1:quadratic,2:double hash
-int mode;
-hashf hash2=NULL;
-
-hash* creat(int c, hashf fun);
-int default_hash_function(int key);
-void insert(hash* f, int a);
-void delete_node(hash* f, int a);
-int search(hash* f, int a);
-void clear(hash* f);
-
-int main()
+static int probe(const OAHash *h, int key, int i)
 {
-    hash* h=creat(23,NULL);
-    for (int i=0;i<7;i++)
-    {
-        int x;
-        scanf("%d",&x);
-        insert(h,x);
-    }
-
-    for (int i=0;i<23;i++)
-    {
-        printf("%4d ",i);
-    }
-    printf("\n");
-    for (int i=0;i<23;i++)
-    {
-        if(h->list[i].state==1)
-            printf("%d ",h->list[i].value);
-
-        else
-            printf("  -1 ");
-    }
-    
-    return 0;
-}
-
-hash* creat(int c, hashf fun)
-{
-    if (c <= 0)
-        return NULL;
-
-    hashnode* h = (hashnode*)malloc(sizeof(hashnode) * c);
-    if (h == NULL)
-        return NULL;
-
-    for (int i = 0; i < c; i++)
-        h[i].state = 0;
-
-    hash* re = (hash*)malloc(sizeof(hash));
-    if (re == NULL)
-    {
-        free(h);
-        return NULL;
-    }
-
-    re->list = h;
-    re->func = (fun == NULL) ? default_hash_function : fun;
-    re->capacity = c;
-    return re;
-}
-int default_hash_function(int key)
-{
-    if (capa <= 0)
-        return 0;
-
-    int value = key % capa;
-    return value < 0 ? value + capa : value;
-}
-static int get_probe_index(hash* f, int a, int i)
-{
-    int pos = f->func(a);
-    switch (mode)
+    int pos = hash_default(key, h->capacity);
+    switch (h->mode)
     {
         case 0:
-            return (pos + i) % f->capacity;
+            return (pos + i) % h->capacity;
         case 1:
-            return (pos + i * i) % f->capacity;
+            return (pos + i * i) % h->capacity;
         case 2:
         {
-            if (hash2 == NULL)
-                return -1;
-            int d = hash2(a);
-            if (d % f->capacity == 0)
-                d = 1;
-            return (pos + i * d) % f->capacity;
+            int d = (h->capacity > 1) ? 1 + (key % (h->capacity - 1)) : 1;
+            return (pos + i * d) % h->capacity;
         }
         default:
             return -1;
     }
 }
 
-void insert(hash* f, int a)
+OAHash* oa_create(int capacity, int mode)
 {
-    if (f == NULL || f->list == NULL)
+    if (capacity <= 0)
+        return NULL;
+    if (mode < 0 || mode > 2)
+        mode = 0;
+    OAHash *h = (OAHash*)malloc(sizeof(OAHash));
+    h->slots = (OASlot*)malloc(sizeof(OASlot) * capacity);
+    for (int i = 0; i < capacity; i++)
+        h->slots[i].state = 0;
+    h->capacity = capacity;
+    h->mode = mode;
+    return h;
+}
+
+void oa_insert(OAHash *h, int value)
+{
+    if (!h || !h->slots)
         return;
 
-    if (f->func == default_hash_function)
-        capa = f->capacity;
-
     int first_deleted = -1;
-    for (int i = 0; i < f->capacity; i++)
+    for (int i = 0; i < h->capacity; i++)
     {
-        int idx = get_probe_index(f, a, i);
+        int idx = probe(h, value, i);
         if (idx < 0)
             return;
 
-        if (f->list[idx].state == 0)
+        if (h->slots[idx].state == 0)
         {
             int target = (first_deleted >= 0) ? first_deleted : idx;
-            f->list[target].value = a;
-            f->list[target].state = 1;
+            h->slots[target].value = value;
+            h->slots[target].state = 1;
             return;
         }
 
-        if (f->list[idx].state == -1 && first_deleted < 0)
+        if (h->slots[idx].state == -1 && first_deleted < 0)
             first_deleted = idx;
 
-        if (f->list[idx].state == 1 && f->list[idx].value == a)
+        if (h->slots[idx].state == 1 && h->slots[idx].value == value)
             return;
     }
 
     if (first_deleted >= 0)
     {
-        f->list[first_deleted].value = a;
-        f->list[first_deleted].state = 1;
+        h->slots[first_deleted].value = value;
+        h->slots[first_deleted].state = 1;
     }
 }
-int search(hash* f, int a)
+
+int oa_search(OAHash *h, int value)
 {
-    if (f == NULL || f->list == NULL)
+    if (!h || !h->slots)
         return -1;
 
-    if (f->func == default_hash_function)
-        capa = f->capacity;
-
-    for (int i = 0; i < f->capacity; i++)
+    for (int i = 0; i < h->capacity; i++)
     {
-        int idx = get_probe_index(f, a, i);
+        int idx = probe(h, value, i);
         if (idx < 0)
             return -1;
 
-        if (f->list[idx].state == 0)
+        if (h->slots[idx].state == 0)
             return -1;
 
-        if (f->list[idx].state == 1 && f->list[idx].value == a)
+        if (h->slots[idx].state == 1 && h->slots[idx].value == value)
             return idx;
     }
     return -1;
 }
 
-void delete_node(hash* f, int a)
+void oa_delete(OAHash *h, int value)
 {
-    if (f == NULL || f->list == NULL)
+    if (!h || !h->slots)
         return;
-
-    if (f->func == default_hash_function)
-        capa = f->capacity;
-
-    for (int i = 0; i < f->capacity; i++)
-    {
-        int idx = get_probe_index(f, a, i);
-        if (idx < 0)
-            return;
-
-        if (f->list[idx].state == 0)
-            break;
-
-        if (f->list[idx].state == 1 && f->list[idx].value == a)
-        {
-            f->list[idx].state = -1;
-            return;
-        }
-    }
+    int idx = oa_search(h, value);
+    if (idx >= 0)
+        h->slots[idx].state = -1;
 }
-void clear(hash* f)
+
+void oa_free(OAHash *h)
 {
-    if (f == NULL || f->list == NULL)
+    if (!h)
         return;
-
-    for (int i = 0; i < f->capacity; i++)
-        if (f->list[i].state == -1)
-            f->list[i].state = 0;
+    free(h->slots);
+    free(h);
 }
-void freeH(hash* H)
-{
-    free(H->list);
-    free(H);
-}
-

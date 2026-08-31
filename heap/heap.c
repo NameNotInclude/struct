@@ -1,111 +1,129 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include "heap.h"
 
-typedef int* heap;
-
-void swap(int* a,int* b);
-void percolatedown(heap h,int n,int i);
-void percolateup(heap h,int n,int i);
-heap build_heap(int* list,int n);
-int delete(heap h,int *n);
-void insert(heap h,int *n,int x);
-void heapsort(int * list,int n);
-
-int main()
+static void swap_int(int *a, int *b)
 {
-    int a[6]={543,5432,654,12,754,234};
-    
-    int n=6;
-    heap H=build_heap(a,n);
-    for (int i=1;i<=6;i++)
-        printf("%d ",H[i]);
-    printf("\n");
-
-    delete(H,&n);
-    for (int i=1;i<=n;i++)
-        printf("%d ",H[i]);
-    printf("\n");
-
-    insert(H,&n,312);
-    for (int i=1;i<=n;i++)
-        printf("%d ",H[i]);
-    printf("\n");
-
-    heapsort(a,6);
-    for (int i=0;i<6;i++)
-        printf("%d ",a[i]);
-
-    free(H);
-    return 0;
+    int t = *a;
+    *a = *b;
+    *b = t;
 }
-void swap(int* a,int* b)
+
+static void percolate_down(int *data, int size, int i)
 {
-    int temp=*a;
-    *a=*b;
-    *b=temp;
-}
-void heapsort(int * list,int n)
-{
-    if (n <= 0) return;
-    heap H = build_heap(list, n);
-    int m = n;
-    for (int i = 0; i < n; i++) 
-    {
-        int v = delete(H, &m);
-        list[i] = v;
-    }
-    free(H);
-}
-void percolatedown(heap h,int n,int i)
-{
-    int pos=i;
+    int pos = i;
     int child;
-    while (pos*2<=n)
+    while (pos * 2 <= size)
     {
-        child=pos*2;
-        if (child+1<=n && h[child+1]<h[child]) child++;
-
-        if (h[pos]<=h[child]) break;
-
-        swap(&h[pos],&h[child]);
-        pos=child;
+        child = pos * 2;
+        if (child + 1 <= size && data[child + 1] < data[child])
+            child++;
+        if (data[pos] <= data[child])
+            break;
+        swap_int(&data[pos], &data[child]);
+        pos = child;
     }
 }
-void percolateup(heap h,int n,int i)
-{
-    int pos=i;
-    int parent;
-    while (pos>1)
-    {
-        parent=pos/2;
-        
-        if (h[pos]>=h[parent]) break;
 
-        swap(&h[pos],&h[parent]);
-        pos=parent;
+static void percolate_up(int *data, int i)
+{
+    int pos = i;
+    while (pos > 1)
+    {
+        int parent = pos / 2;
+        if (data[pos] >= data[parent])
+            break;
+        swap_int(&data[pos], &data[parent]);
+        pos = parent;
     }
 }
-heap build_heap(int* list,int n)
+
+Heap* heap_create(int capacity)
 {
-    heap H=(heap)malloc(sizeof(int)*(n+1));
-    for (int i=1;i<=n;i++)
-        H[i]=list[i-1];
-    for (int i=n/2;i>=1;i--)
-        percolatedown(H,n,i);
-    return H;
+    if (capacity < 0)
+        capacity = 0;
+    Heap *h = (Heap*)malloc(sizeof(Heap));
+    h->data = (int*)malloc(sizeof(int) * (capacity + 1));
+    h->size = 0;
+    h->capacity = capacity;
+    return h;
 }
-int delete(heap h,int *n)
+
+void heap_free(Heap *h)
 {
-    if (*n<=0) return -32768;
-    int tmp=h[1];
-    h[1]=h[*n];
-    (*n)--;
-    percolatedown(h,*n,1);
-    return tmp;
+    if (!h)
+        return;
+    free(h->data);
+    free(h);
 }
-void insert(heap h,int *n,int x)
+
+void heap_build(Heap *h, const int *values, int n)
 {
-    (*n)++;
-    h[*n]=x;
-    percolateup(h,*n,*n);
+    if (!h || n < 0)
+        return;
+    if (n > h->capacity)
+    {
+        int *nd = (int*)realloc(h->data, sizeof(int) * (n + 1));
+        if (!nd)
+            return;
+        h->data = nd;
+        h->capacity = n;
+    }
+    for (int i = 1; i <= n; i++)
+        h->data[i] = values[i - 1];
+    h->size = n;
+    for (int i = n / 2; i >= 1; i--)
+        percolate_down(h->data, h->size, i);
+}
+
+void heap_insert(Heap *h, int value)
+{
+    if (!h)
+        return;
+    if (h->size >= h->capacity)
+    {
+        int nc = h->capacity == 0 ? 4 : h->capacity * 2;
+        int *nd = (int*)realloc(h->data, sizeof(int) * (nc + 1));
+        if (!nd)
+            return;
+        h->data = nd;
+        h->capacity = nc;
+    }
+    h->data[++h->size] = value;
+    percolate_up(h->data, h->size);
+}
+
+int heap_delete_min(Heap *h)
+{
+    if (!h || h->size == 0)
+        return -1;
+    int min = h->data[1];
+    h->data[1] = h->data[h->size--];
+    percolate_down(h->data, h->size, 1);
+    return min;
+}
+
+int heap_min(const Heap *h)
+{
+    return (!h || h->size == 0) ? -1 : h->data[1];
+}
+
+int heap_size(const Heap *h)
+{
+    return h ? h->size : 0;
+}
+
+int heap_empty(const Heap *h)
+{
+    return (!h || h->size == 0);
+}
+
+void heap_sort(int *array, int n)
+{
+    if (n <= 0)
+        return;
+    Heap *h = heap_create(n);
+    heap_build(h, array, n);
+    for (int i = 0; i < n; i++)
+        array[i] = heap_delete_min(h);
+    heap_free(h);
 }
