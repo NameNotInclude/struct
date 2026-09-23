@@ -15,5 +15,6 @@ typedef node* PtrToNode;
 void update(PtrToNode AVL);
 PtrToNode RightRot(PtrToNode AVL);
 PtrToNode LeftRot(PtrToNode AVL);
-PtrToNode insert(PtrToNode AVL,int n);
+PtrToNode insert(PtrToNode AVL, int n);
+PtrToNode deleteNode(PtrToNode AVL, int key);
 #endif

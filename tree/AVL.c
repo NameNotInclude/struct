@@ -1,20 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <AVL.h>
+#include "AVL.h"
 
 void update(PtrToNode AVL)
 {
-    if (AVL==NULL)
-        AVL->height=-1;
-    else
-    {
-        int h_l = AVL->left==NULL?-1:AVL->left->height;
-        int h_r = AVL->right==NULL?-1:AVL->right->height;
+    if (AVL == NULL)
+        return;
 
-        AVL->height = h_l>h_r?h_l+1:h_r+1;
-        AVL->bf = h_l-h_r;
-    }
+    int h_l = AVL->left == NULL ? -1 : AVL->left->height;
+    int h_r = AVL->right == NULL ? -1 : AVL->right->height;
 
+    AVL->height = h_l > h_r ? h_l + 1 : h_r + 1;
+    AVL->bf = h_l - h_r;
 }
 
 PtrToNode RightRot(PtrToNode AVL)
@@ -56,29 +53,96 @@ PtrToNode insert(PtrToNode AVL,int n)
 
         return newnode;
     }
-        
-    else if (n < AVL->data)
-        AVL->left=insert(AVL->left,n);
 
+    if (n < AVL->data)
+        AVL->left = insert(AVL->left, n);
     else if (n > AVL->data)
-        AVL->right = insert(AVL->right,n);
-
+        AVL->right = insert(AVL->right, n);
+    else
+        return AVL;
 
     update(AVL);
 
-    if (AVL->bf > 1 && n < AVL->left->data)
+    // LL
+    if (AVL->bf > 1 && AVL->left != NULL && AVL->left->bf >= 0)
         return RightRot(AVL);
 
-    if (AVL->bf < -1 && AVL->right->data < n)
+    // RR
+    if (AVL->bf < -1 && AVL->right != NULL && AVL->right->bf <= 0)
         return LeftRot(AVL);
 
-    if (AVL->bf > 1 && n > AVL->left->data)
+    // LR
+    if (AVL->bf > 1 && AVL->left != NULL && AVL->left->bf < 0)
     {
         AVL->left = LeftRot(AVL->left);
         return RightRot(AVL);
     }
 
-    if (AVL->bf < -1 && n < AVL->right->data)
+    // RL
+    if (AVL->bf < -1 && AVL->right != NULL && AVL->right->bf > 0)
+    {
+        AVL->right = RightRot(AVL->right);
+        return LeftRot(AVL);
+    }
+
+    return AVL;
+}
+
+PtrToNode FindMin(PtrToNode AVL)
+{
+    PtrToNode curr=AVL;
+
+    while (curr != NULL && curr->left != NULL)
+        curr = curr->left;
+
+    return curr;
+}
+
+PtrToNode deleteNode(PtrToNode AVL,int key)
+{
+    if (AVL == NULL)
+        return NULL;
+
+    if (AVL->data > key)
+        AVL->left = deleteNode(AVL->left, key);
+    else if (AVL->data < key)
+        AVL->right = deleteNode(AVL->right, key);
+    else
+    {
+        if (AVL->left == NULL || AVL->right == NULL)
+        {
+            PtrToNode temp = AVL->left ? AVL->left : AVL->right;
+            free(AVL);
+            return temp;
+        }
+
+        PtrToNode temp = FindMin(AVL->right);
+        AVL->data = temp->data;
+        AVL->right = deleteNode(AVL->right, temp->data);
+    }
+
+    update(AVL);
+
+    if (AVL == NULL)
+        return NULL;
+
+    // LL
+    if (AVL->bf > 1 && AVL->left != NULL && AVL->left->bf >= 0)
+        return RightRot(AVL);
+
+    // RR
+    if (AVL->bf < -1 && AVL->right != NULL && AVL->right->bf <= 0)
+        return LeftRot(AVL);
+
+    // LR
+    if (AVL->bf > 1 && AVL->left != NULL && AVL->left->bf < 0)
+    {
+        AVL->left = LeftRot(AVL->left);
+        return RightRot(AVL);
+    }
+
+    // RL
+    if (AVL->bf < -1 && AVL->right != NULL && AVL->right->bf > 0)
     {
         AVL->right = RightRot(AVL->right);
         return LeftRot(AVL);
